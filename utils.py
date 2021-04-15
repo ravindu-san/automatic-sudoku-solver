@@ -3,12 +3,12 @@ from scipy.spatial import distance as dist
 
 
 def order_points(pts):
-    # four coordinates are sorted based on the x coordinate
+    # sort based on the x coordinate
     x_sorted = pts[np.argsort(pts[:, 0]), :]
 
-    # The leftmost 2 coordinates
+    # leftmost 2 coordinates
     left_most = x_sorted[:2, :]
-    # The rightmost 2 coordinates
+    # rightmost 2 coordinates
     right_most = x_sorted[2:, :]
 
     # top left & bottom left coordinates

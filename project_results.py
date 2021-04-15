@@ -6,23 +6,24 @@ from utils import order_points
 def unwrap_image(img_src, img_dst, ordered_points, crop_indices):
 
     ordered_points = np.array(ordered_points)
+    source_pts = crop_indices
 
-    pts_source = crop_indices
-    homography, status = cv2.findHomography(pts_source, ordered_points)
-
+    # register four point transformed sudoku grid with original sudoku grid
+    homography, status = cv2.findHomography(source_pts , ordered_points)
     warped = cv2.warpPerspective(img_src, homography, (img_dst.shape[1], img_dst.shape[0]))
 
+    # insert sudoku grid with results to the area of original sudoku grid in original image
     cv2.fillConvexPoly(img_dst, ordered_points, 0, 16)
-
-    # Add the un-warped sudoku puzzle to the black area
     unwrapped_image = cv2.add(img_dst, warped)
+
+    # cv2.imwrite("./output_images/result_project.jpg", unwrapped_image)
 
     return unwrapped_image
 
 
-def print_on_screen(puzzle, print_list, solution, img_result, puzzle_contour, crop_indices):
+def project_to_original_img(puzzle, print_list, solution, img_result, puzzle_contour, crop_indices):
 
-    output_image = puzzle.copy()
+    output_img = puzzle.copy()
 
     for val in print_list:
         start_x, start_y, end_x, end_y = val['location']
@@ -39,14 +40,14 @@ def print_on_screen(puzzle, print_list, solution, img_result, puzzle_contour, cr
         text_y += end_y
 
         index = val['index']
-        cv2.putText(output_image, str(solution[index[1]][index[0]]), (text_x, text_y),
+        cv2.putText(output_img, str(solution[index[1]][index[0]]), (text_x, text_y),
                     cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), thickness)
 
-    original_image = img_result.copy()
-    wrapped_image = output_image.copy()
+    original_img = img_result.copy()
+    wrapped_img = output_img.copy()
 
     ordered_points = order_points(puzzle_contour.reshape(4, 2)).astype('int32')
 
-    print_image = unwrap_image(wrapped_image, original_image, ordered_points, crop_indices)
+    print_img = unwrap_image(wrapped_img, original_img, ordered_points, crop_indices)
 
-    return print_image
+    return print_img

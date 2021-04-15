@@ -54,14 +54,16 @@ def four_point_transform(image, pts):
     max_height = max(int(height_1), int(height_2))
 
     crop_indices = np.array([
-        [0, 0],  # Index for upper left corner
-        [max_width - 1, 0],  # Index for upper right corner (-1 because it is an index)
-        [max_width - 1, max_height - 1],  # Index for lower right corner
-        [0, max_height - 1]], dtype="float32")  # Index for lower left corner
+        [0, 0],  # index of upper left corner
+        [max_width - 1, 0],  # index of upper right corner
+        [max_width - 1, max_height - 1],  # index of lower right corner
+        [0, max_height - 1]], dtype="float32")  # index of lower left corner
 
-    # Take the corner coordinates and warp them to fit the index above
+
     perspective_trans = cv2.getPerspectiveTransform(rect, crop_indices)
     warped = cv2.warpPerspective(image, perspective_trans, (max_width, max_height))
+
+    # cv2.imwrite("./output_images/warped.jpg", warped)
 
     return warped, crop_indices
 
@@ -114,15 +116,14 @@ def extract_grid(image, debug=False):
         cv2.imshow(" ", output)
         cv2.waitKey(0)
 
-    # The warped extracted puzzle and its corner coordinates (indexes)
-    puzzle_wp_colour, crop_indices = four_point_transform(image, puzzle_contour.reshape(4, 2))
-
-    # The warped extracted puzzle (grayscale) and its corner coordinates (indexes)
+    # The warped grid and its coordinates
+    puzzle_wp_color, crop_indices = four_point_transform(image, puzzle_contour.reshape(4, 2))
     puzzle_wp_gray, crop_indices = four_point_transform(gray, puzzle_contour.reshape(4, 2))
 
     if debug:
-        cv2.imshow(" ", puzzle_wp_colour)
-    return puzzle_wp_colour, puzzle_wp_gray, puzzle_contour, crop_indices
+        cv2.imshow(" ", puzzle_wp_color)
+
+    return puzzle_wp_color, puzzle_wp_gray, puzzle_contour, crop_indices
 
 
 def extract_digit(cell, debug=False):
@@ -135,22 +136,18 @@ def extract_digit(cell, debug=False):
     if len(contours) == 0:
         return None
 
-    # Get the contour with the maximum areas
+    # digit is the
+    # contour with the maximum area and
+    # must fill at least 0.03 of the cell area
     digit_contour = max(contours, key=cv2.contourArea)
     mask = np.zeros(thresh.shape, dtype="uint8")
-
-    # Take black image, draw the max contour. 1st arg: black image, 2nd: list of contours (only one here)
-    # 3rd: index of contour (-1 means draw all in the list), 4th: Colour 5th: Thickness (-1 means fill it)
     cv2.drawContours(mask, [digit_contour], -1, 255, -1)
-
     (h, w) = thresh.shape
-    # See which percentage of image is filled by the above filled contour
     percent_filled = cv2.countNonZero(mask) / float(w * h)
 
     if percent_filled < 0.03:
         return None
 
-    # Using the above mask using the and operation extract the digit from the image input
     digit = cv2.bitwise_and(thresh, thresh, mask=mask)
 
     if debug:
@@ -179,24 +176,19 @@ def check_allowed_values(allowed_values, x, y, value, box_dim=3):
 
 
 def get_the_grid(img_result, model):
-    # The warped puzzle,warped puzzle (grayscale), puzzle contour coordinates (in image), warped puzzle corner indices
-    # found_puzzle = find_puzzle(img_result, False)
+
     found_puzzle = extract_grid(img_result, False)
 
     if found_puzzle is None:
         return None
     else:
-        puzzle_wp_colour, puzzle_wp_gray, puzzle_contour, dst = found_puzzle
+        puzzle_wp_color, puzzle_wp_gray, puzzle_contour, dst = found_puzzle
 
-    # If puzzle contour was not found
     if puzzle_contour is None:
         return None
 
-    # Check if puzzle qualifies for sudoku puzzle (the size of the puzzle)
     if not check_if_puzzle(puzzle_contour):
         return None
-
-    # four_point_transform(img_result.copy(), puzzle_contour.reshape(4, 2))
 
     board = np.zeros((9, 9), dtype="int")
     print_list = []
@@ -205,25 +197,22 @@ def get_the_grid(img_result, model):
     allowed_values = [[[True for _ in range(9)] for _ in range(9)]
                       for _ in range(9)]
 
-    # The length of a cell
+    # cell size
     step_x = puzzle_wp_gray.shape[1] // 9
     step_y = puzzle_wp_gray.shape[0] // 9
 
-    # Loop over the grid locations
     for y in range(0, 9):
         for x in range(0, 9):
 
-            # Compute the starting and ending (x, y)-coordinates of the current cell
+            # start and end coordinates of current cell
             start_x = x * step_x
             start_y = y * step_y
             end_x = (x + 1) * step_x
             end_y = (y + 1) * step_y
 
-            # Crop the cell from the warped transform image and then extract the digit from the cell
             cell = puzzle_wp_gray[start_y:end_y, start_x:end_x]
             digit = extract_digit(cell, False)
 
-            # Verify that the cell is not empty
             if digit is not None:
 
                 # Resize the cell to 28x28
@@ -232,7 +221,7 @@ def get_the_grid(img_result, model):
                 roi = img_to_array(roi)
                 roi = np.expand_dims(roi, axis=0)
 
-                # Classify the digit and update the Sudoku board with the prediction
+                # predict the digit
                 prediction = model.predict(roi)[0]
                 predict_num = np.argsort(-prediction)[:3]
                 added_num = False
@@ -248,11 +237,10 @@ def get_the_grid(img_result, model):
                     return None
             else:
 
-                # Coordinates of image to print if it is an empty cell
+                # coordinates of empty cells
                 print_list.append({"index": (x, y), "location": (start_x, start_y, end_x, end_y)})
 
     if digit_count < 17:
         return None
 
-    # print(board)
-    return puzzle_wp_colour, puzzle_contour, dst, board, print_list
+    return puzzle_wp_color, puzzle_contour, dst, board, print_list
